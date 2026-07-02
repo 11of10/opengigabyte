@@ -1,0 +1,62 @@
+Aorus Laptop EC Driver Setup Guide
+This guide provides both manual step-by-step instructions and an automated bash script to configure your aorus_laptop driver via DKMS and link it to GNOME's power-profiles-daemon.
+
+The Automated Setup Script
+You can save the following script as setup_aorus.sh, make it executable with chmod +x setup_aorus.sh, and run it with sudo.
+
+WARNING
+
+Before running this script, ensure that the aorus_laptop source code is located in the same directory where you run the script, or modify the DRIVER_SRC_DIR variable to point to your driver's source folder.
+
+
+Step-by-Step Manual Instructions
+If you prefer to configure this manually instead of using the script, follow these steps:
+
+1. Install Dependencies
+You need the kernel headers and compilation tools:
+
+bash
+
+sudo apt update
+sudo apt install dkms build-essential linux-headers-$(uname -r) python3-dbus python3-gi
+2. Set Up DKMS
+Copy your source folder into /usr/src/:
+
+bash
+
+sudo cp -r path/to/aorus_laptop /usr/src/aorus_laptop-1.0
+Ensure that a dkms.conf file exists in that directory. Then, register and build the module:
+
+bash
+
+sudo dkms add -m aorus_laptop -v 1.0
+sudo dkms build -m aorus_laptop -v 1.0
+sudo dkms install -m aorus_laptop -v 1.0
+3. Load on Boot
+Create a file to tell systemd to load the driver at startup:
+
+bash
+
+echo "aorus_laptop" | sudo tee /etc/modules-load.d/aorus_laptop.conf
+sudo modprobe aorus_laptop
+4. Create the Bridging Script
+We need a script that listens to GNOME's power-profiles-daemon over DBus and pushes the required mode to the driver.
+
+Create a script at /usr/local/bin/aorus-power-bridge.py.
+Paste the Python code from the BRIDGE_SCRIPT section in the bash script above.
+Make it executable: sudo chmod +x /usr/local/bin/aorus-power-bridge.py.
+5. Create a Systemd Service
+To ensure the script runs continuously in the background, create a systemd service:
+
+bash
+
+sudo nano /etc/systemd/system/aorus-power-bridge.service
+Paste the [Unit] and [Service] definitions from the automated script into this file. Save and close.
+
+Finally, enable and start the service:
+
+bash
+
+sudo systemctl daemon-reload
+sudo systemctl enable aorus-power-bridge.service
+sudo systemctl start aorus-power-bridge.service
