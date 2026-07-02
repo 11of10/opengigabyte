@@ -1,0 +1,36 @@
+Aorus Laptop EC Driver & GNOME Integration Report
+Overview
+Your system utilizes a custom, out-of-tree Linux kernel module (aorus_laptop) designed to communicate directly with the Embedded Controller (EC) of your Gigabyte/Aorus laptop. This module enables manual and programmatic control over fan curves, keyboard RGB, and hardware-level performance presets.
+
+To make this seamless, the setup is divided into two major components:
+
+DKMS Integration: Ensures the driver survives kernel updates.
+GNOME Power Profiles Mapping: Bridges the GNOME desktop UI to the EC's hardware power limits.
+Step 1: The Driver Architecture and DKMS Setup
+Because the aorus_laptop driver is not part of the mainline Linux kernel, manually compiling it every time your system receives a kernel update would be tedious. We utilize DKMS (Dynamic Kernel Module Support) to automate this.
+
+Source Code Placement: The source code (the aorus_laptop directory) and its Makefile are typically staged in /usr/src/aorus_laptop-<version>/.
+dkms.conf Configuration: Inside that directory, a dkms.conf file is defined. This file tells the DKMS framework how to compile the module (e.g., instructing it to run make against the current kernel headers) and what the resulting .ko (kernel object) file is named.
+DKMS Registration: The module was added to the DKMS tree using dkms add.
+Automated Rebuilds: When your system boots with a new kernel (or when apt upgrades your kernel), the DKMS framework detects the aorus_laptop module in its registry. It automatically executes the Makefile, compiles a fresh kernel module for the exact kernel version you just installed, and inserts it into /lib/modules/$(uname -r)/updates/dkms/.
+Auto-Load on Boot: A configuration file in /etc/modules-load.d/ ensures that the systemd-modules-load service loads the driver into the kernel silently during early boot.
+Step 2: Bridging the EC to GNOME Power Modes
+With the driver loaded, the Embedded Controller exposes a sysfs interface (typically found under /sys/devices/platform/aorus_laptop/). This virtual filesystem allows the OS to read and write hardware variables by reading/writing to text files.
+
+GNOME manages system performance profiles via the power-profiles-daemon, which natively exposes three modes to the Quick Settings menu:
+
+Power Saver
+Balanced
+Performance
+To tie the Aorus EC preset modes to GNOME's UI, we set up a hook mechanism:
+
+The DBus Listener / Systemd Service: A background daemon or hook is configured to monitor the net.hadess.PowerProfiles D-Bus interface. Whenever you click a different power mode in the GNOME Quick Settings, the daemon broadcasts a state change.
+The Translation Logic: The listener catches that D-Bus signal and executes a script that translates GNOME's profile string into the specific integer or byte code that the Aorus EC expects.
+Executing the Hardware Change: The script then writes that value directly to the driver's sysfs file (e.g., echo <value> > /sys/devices/platform/aorus_laptop/power_mode).
+The resulting mapping behaves exactly as you configured:
+
+GNOME "Power Saver" ➔ Translates to Quiet Mode. The EC spins down the fans, reduces the CPU package power limit (PL1/PL2), and prioritizes battery life and silence.
+GNOME "Balanced" ➔ Translates to Normal Mode. The EC allows moderate fan curves and standard voltage limits for everyday multitasking.
+GNOME "Performance" ➔ Translates to Gaming Mode. The EC ramps up fan aggressiveness, maximizes thermal limits, and allows the GPU/CPU to pull maximum wattage.
+Summary
+By combining the persistent reliability of DKMS and the event-driven hooks of the power-profiles-daemon, your laptop functions exactly like a native, OEM-supported Linux device—automatically surviving kernel upgrades and letting you control hardware-level thermals straight from the GNOME UI.
